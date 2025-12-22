@@ -7,7 +7,7 @@ const cors = require('cors');
 const session = require('express-session');
 const MongoStore = require("connect-mongodb-session")(session);
 const dotenv = require('dotenv') 
-const userRoutes = require('./Routes/UserRoutes');
+const userRoutes = require('./routes/UserRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;

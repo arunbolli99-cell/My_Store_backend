@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const userController = require('../Controller/userController');
-const authMiddleware = require('../Middleware/authMiddleware');
+const userController = require('../controller/userController');
+const authMiddleware = require('../middleware/authMiddleware');
 
 // ------------------- AUTHENTICATION ENDPOINTS -------------------
 router.post('/register', userController.newUser);
