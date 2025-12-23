@@ -1,38 +1,39 @@
-const fast2sms = require('fast2sms');
+// utils/smsService.js
 
 const generateOTP = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+  return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 const sendOTPViaSMS = async (phoneNumber, otp) => {
-    try {
-        const apiKey = process.env.FAST2SMS_API_KEY;
+  const apiKey = process.env.FAST2SMS_API_KEY;
 
-        if (!apiKey) {
-            console.error('FAST2SMS_API_KEY not configured');
-            throw new Error('SMS service not configured');
-        }
+  if (!apiKey) {
+    throw new Error("FAST2SMS API key missing");
+  }
 
-        const message = `Your MY STORE OTP is ${otp}. Valid for 5 minutes. Do not share this OTP with anyone.`;
+  const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+    method: "POST",
+    headers: {
+      "authorization": apiKey,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      route: "otp",
+      numbers: phoneNumber,
+      message: `Your MY STORE OTP is ${otp}. Valid for 5 minutes.`
+    })
+  });
 
-        const response = await fast2sms.sendMessage({
-            authorization: apiKey,
-            message: message,
-            numbers: [phoneNumber]
-        });
+  const data = await response.json();
 
-        return {
-            success: true,
-            messageId: response.request_id,
-            status: response.return
-        };
-    } catch (error) {
-        console.error('SMS sending failed:', error);
-        throw new Error(`Failed to send OTP: ${error.message}`);
-    }
+  if (!data || data.return !== true) {
+    throw new Error(data?.message || "FAST2SMS failed");
+  }
+
+  return true;
 };
 
 module.exports = {
-    generateOTP,
-    sendOTPViaSMS
+  generateOTP,
+  sendOTPViaSMS
 };
