@@ -1,9 +1,12 @@
 const User = require('../models/User');
 const Cart = require('../models/User_cart');
 const Order = require('../models/Order');
+const OTP = require('../models/OTP');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require("nodemailer");
+const { generateOTP, sendOTPViaSMS } = require('../utils/smsService');
+const { checkRateLimit, resetRateLimit } = require('../utils/rateLimiter');
 
 // ------------------- EMAIL TRANSPORT -------------------
 const transporter = nodemailer.createTransport({
@@ -386,6 +389,140 @@ const getOrders = async (req, res) => {
   }
 };
 
+// ------------------- SEND OTP -------------------
+const sendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const rateLimit = checkRateLimit(email, 'sendOtp');
+    if (!rateLimit.allowed) {
+      return res.status(429).json({
+        error: "Too many OTP requests. Please try again later.",
+        retryAfter: Math.ceil((rateLimit.resetTime - Date.now()) / 1000)
+      });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (!user.phone) {
+      return res.status(400).json({ error: "Phone number not registered" });
+    }
+
+    const otp = generateOTP();
+
+    await OTP.deleteMany({ email: email.toLowerCase() });
+
+    const expirationTime = new Date(Date.now() + 5 * 60 * 1000);
+
+    const otpRecord = new OTP({
+      userId: user._id,
+      email: email.toLowerCase(),
+      otp: otp,
+      expiresAt: expirationTime,
+      attempts: 0
+    });
+
+    await otpRecord.save();
+
+    try {
+      await sendOTPViaSMS(user.phone, otp);
+      console.log(`OTP sent successfully to ${user.phone} for email ${email}`);
+
+      return res.status(200).json({
+        message: "OTP sent to registered mobile number",
+        success: true
+      });
+    } catch (smsError) {
+      console.error("SMS sending failed:", smsError);
+      await OTP.deleteOne({ _id: otpRecord._id });
+      return res.status(500).json({
+        error: "Failed to send OTP",
+        details: smsError.message
+      });
+    }
+
+  } catch (error) {
+    console.error("Send OTP Error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+// ------------------- VERIFY OTP -------------------
+const verifyOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: "Email and OTP are required" });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const otpRecord = await OTP.findOne({
+      email: email.toLowerCase(),
+      userId: user._id
+    });
+
+    if (!otpRecord) {
+      return res.status(400).json({ error: "No OTP found. Please request a new OTP." });
+    }
+
+    if (new Date() > otpRecord.expiresAt) {
+      await OTP.deleteOne({ _id: otpRecord._id });
+      return res.status(400).json({ error: "OTP expired, request a new one" });
+    }
+
+    if (otpRecord.attempts >= 3) {
+      await OTP.deleteOne({ _id: otpRecord._id });
+      return res.status(400).json({ error: "Maximum OTP verification attempts exceeded. Request a new OTP." });
+    }
+
+    if (otpRecord.otp !== otp) {
+      otpRecord.attempts += 1;
+      await otpRecord.save();
+      return res.status(400).json({
+        error: "Invalid OTP",
+        attemptsRemaining: 3 - otpRecord.attempts
+      });
+    }
+
+    await OTP.deleteOne({ _id: otpRecord._id });
+    resetRateLimit(email, 'sendOtp');
+
+    const token = jwt.sign(
+      { userId: user._id, email: user.email },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '7d' }
+    );
+
+    await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
+
+    return res.status(200).json({
+      message: "OTP verified successfully",
+      success: true,
+      token: token,
+      userId: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email
+    });
+
+  } catch (error) {
+    console.error("Verify OTP Error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
 // ------------------- EXPORT -------------------
 module.exports = {
   newUser,
@@ -397,5 +534,7 @@ module.exports = {
   clearCart,
   removeItemFromCart,
   placeOrder,
-  getOrders
+  getOrders,
+  sendOtp,
+  verifyOtp
 };

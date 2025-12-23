@@ -6,6 +6,8 @@ const authMiddleware = require('../middleware/authMiddleware');
 // ------------------- AUTHENTICATION ENDPOINTS -------------------
 router.post('/register', userController.newUser);
 router.post('/login', userController.userlogin);
+router.post('/auth/send-otp', userController.sendOtp);
+router.post('/auth/verify-otp', userController.verifyOtp);
 
 // ------------------- CART ENDPOINTS (Protected) -------------------
 router.post('/cart/add', authMiddleware, userController.addToCart);
