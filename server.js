@@ -14,12 +14,13 @@ const PORT = process.env.PORT || 5000;
 
 dotenv.config();
 
-app.use(cors({
-  origin: 'https://my-store-backend-h6ho.onrender.com',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+app.use(
+  cors({
+    origin: 'https://my-store-project-seven.vercel.app',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  })
+);
 
 app.use(bodyParser.json());
 
