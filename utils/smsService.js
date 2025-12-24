@@ -25,7 +25,7 @@ const sendOTPViaSMS = async (toNumber, otp) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        route: "otp",
+        route: "q",
         numbers: toNumber,
         message: `Your MY STORE OTP is ${otp}. Valid for 5 minutes. Do not share this with anyone.`
       })
