@@ -1,12 +1,9 @@
 const User = require('../models/User');
 const Cart = require('../models/User_cart');
 const Order = require('../models/Order');
-const OTP = require('../models/OTP');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require("nodemailer");
-const { generateOTP, sendOTPViaSMS } = require('../utils/smsService');
-const { checkRateLimit, resetRateLimit } = require('../utils/rateLimiter');
 
 // ------------------- EMAIL TRANSPORT -------------------
 const transporter = nodemailer.createTransport({
@@ -389,165 +386,6 @@ const getOrders = async (req, res) => {
   }
 };
 
-const sendOtp = async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    if (!email || typeof email !== 'string') {
-      console.warn("❌ Invalid email provided:", email);
-      return res.status(400).json({ error: "Valid email is required" });
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
-    console.log(`🔍 Processing OTP request for email: ${normalizedEmail}`);
-
-    const rateLimit = checkRateLimit(normalizedEmail, 'sendOtp');
-    if (!rateLimit.allowed) {
-      console.warn(`⏳ Rate limit exceeded for ${normalizedEmail}`);
-      return res.status(429).json({
-        error: "Too many OTP requests. Please try again later.",
-        retryAfter: Math.ceil((rateLimit.resetTime - Date.now()) / 1000)
-      });
-    }
-
-    const user = await User.findOne({ email: normalizedEmail });
-    if (!user) {
-      console.warn(`❌ User not found for email: ${normalizedEmail}`);
-      return res.status(404).json({ error: "Email not registered" });
-    }
-
-    if (!user.phone || user.phone.trim() === '') {
-      console.warn(`❌ Phone number not registered for user: ${normalizedEmail}`);
-      return res.status(400).json({ error: "Phone number not registered with your account" });
-    }
-
-    const otp = generateOTP();
-    console.log(`🔐 Generated OTP: ${otp} for ${normalizedEmail}`);
-
-    await OTP.deleteMany({ email: normalizedEmail });
-
-    const expirationTime = new Date(Date.now() + 5 * 60 * 1000);
-
-    const otpRecord = new OTP({
-      userId: user._id,
-      email: normalizedEmail,
-      phone: user.phone.trim(),
-      otp: otp,
-      expiresAt: expirationTime,
-      attempts: 0
-    });
-
-    await otpRecord.save();
-    console.log(`💾 OTP record saved to database for ${normalizedEmail}`);
-
-    try {
-      await sendOTPViaSMS(user.phone.trim(), otp);
-      console.log(`✅ OTP sent successfully to ${user.phone} for email ${normalizedEmail}`);
-
-      return res.status(200).json({
-        message: "OTP sent to registered mobile number",
-        success: true
-      });
-    } catch (smsError) {
-      console.error(`❌ SMS sending failed for ${normalizedEmail}:`, smsError.message);
-      await OTP.deleteOne({ _id: otpRecord._id });
-      return res.status(500).json({
-        error: "Failed to send OTP",
-        details: smsError.message
-      });
-    }
-
-  } catch (error) {
-    console.error("❌ Send OTP Error:", error);
-    res.status(500).json({ error: "Server error while processing OTP request" });
-  }
-};
-
-const verifyOtp = async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-
-    if (!email || typeof email !== 'string' || !otp || typeof otp !== 'string') {
-      console.warn("❌ Invalid email or OTP provided");
-      return res.status(400).json({ error: "Valid email and OTP are required" });
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
-    const trimmedOtp = otp.trim();
-    console.log(`🔍 Processing OTP verification for email: ${normalizedEmail}`);
-
-    const user = await User.findOne({ email: normalizedEmail });
-    if (!user) {
-      console.warn(`❌ User not found for email: ${normalizedEmail}`);
-      return res.status(404).json({ error: "Email not registered" });
-    }
-
-    const otpRecord = await OTP.findOne({
-      email: normalizedEmail,
-      userId: user._id
-    });
-
-    if (!otpRecord) {
-      console.warn(`❌ No OTP record found for email: ${normalizedEmail}`);
-      return res.status(400).json({ error: "No OTP found. Please request a new OTP." });
-    }
-
-    if (new Date() > otpRecord.expiresAt) {
-      console.warn(`⏱️ OTP expired for email: ${normalizedEmail}`);
-      await OTP.deleteOne({ _id: otpRecord._id });
-      return res.status(400).json({ error: "OTP expired. Please request a new OTP." });
-    }
-
-    if (otpRecord.attempts >= 3) {
-      console.warn(`❌ Max attempts exceeded for email: ${normalizedEmail}`);
-      await OTP.deleteOne({ _id: otpRecord._id });
-      return res.status(400).json({ error: "Maximum OTP verification attempts exceeded. Please request a new OTP." });
-    }
-
-    if (otpRecord.otp !== trimmedOtp) {
-      otpRecord.attempts += 1;
-      await otpRecord.save();
-      const remainingAttempts = 3 - otpRecord.attempts;
-      console.warn(`❌ Invalid OTP attempt for ${normalizedEmail}. Remaining attempts: ${remainingAttempts}`);
-      return res.status(400).json({
-        error: "Invalid OTP",
-        attemptsRemaining: remainingAttempts
-      });
-    }
-
-    await OTP.deleteOne({ _id: otpRecord._id });
-    resetRateLimit(normalizedEmail, 'sendOtp');
-    console.log(`✅ OTP verified successfully for ${normalizedEmail}`);
-
-    if (!process.env.JWT_SECRET) {
-      console.error("❌ JWT_SECRET not configured in environment");
-      return res.status(500).json({ error: "Server configuration error" });
-    }
-
-    const token = jwt.sign(
-      { userId: user._id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    console.log(`🎟️ JWT token generated for user: ${user._id}`);
-
-    return res.status(200).json({
-      message: "OTP verified successfully",
-      success: true,
-      token: token,
-      userId: user._id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email
-    });
-
-  } catch (error) {
-    console.error("❌ Verify OTP Error:", error);
-    res.status(500).json({ error: "Server error while verifying OTP" });
-  }
-};
-
 // ------------------- EXPORT -------------------
 module.exports = {
   newUser,
@@ -559,7 +397,5 @@ module.exports = {
   clearCart,
   removeItemFromCart,
   placeOrder,
-  getOrders,
-  sendOtp,
-  verifyOtp
+  getOrders
 };

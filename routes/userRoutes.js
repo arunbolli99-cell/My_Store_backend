@@ -1,13 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const userController = require('../controller/userController');
+const userController = require('./controller/userController');
 const authMiddleware = require('../middleware/authMiddleware');
 
 // ------------------- AUTHENTICATION ENDPOINTS -------------------
 router.post('/register', userController.newUser);
 router.post('/login', userController.userlogin);
-router.post('/auth/send-otp', userController.sendOtp);
-router.post('/auth/verify-otp', userController.verifyOtp);
 
 // ------------------- CART ENDPOINTS (Protected) -------------------
 router.post('/cart/add', authMiddleware, userController.addToCart);
