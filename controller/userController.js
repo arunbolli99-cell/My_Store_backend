@@ -5,17 +5,6 @@ const JWT = require('jsonwebtoken');
 const Dotenv = require('dotenv');
 const Products = require('../models/Product_data');
 const bcrypt = require('bcrypt');
-const sgMail = require("@sendgrid/mail");
-const Razorpay = require("razorpay");
-const crypto = require("crypto");
-
-Dotenv.config();
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
 // ------------------- GET PRODUCTS -------------------
 
 const products = async (req, res) => {
@@ -27,82 +16,6 @@ const products = async (req, res) => {
   }
 };
 
-
-// ------------------- EMAIL TRANSPORT -------------------
-// SendGrid is used instead of nodemailer for better reliability on Render.
-
-// ------------------- SEND EMAIL FUNCTION -------------------
-async function sendRegistrationEmail(toEmail, firstName) {
-  const msg = {
-    to: toEmail,
-    from: process.env.EMAIL_USER,
-    subject: "Registration Successful!",
-    html: `
-      <h2>Welcome ${firstName} 🎉</h2>
-      <p>Your account has been created successfully.</p>
-      <p>Thank you for joining My Store!</p>
-      <hr/>
-      <p>This is an automated message, please do not reply.</p>
-    `
-  };
-
-  return sgMail.send(msg);
-}
-
-// ------------------- SEND ORDER CONFIRMATION EMAIL -------------------
-async function sendOrderConfirmationEmail(toEmail, orderDetails) {
-  const { orderId, products_items, totalAmount, paymentMethod, address } = orderDetails;
-
-  const itemsHtml = products_items.map(item => `
-    <tr>
-      <td style="padding: 10px; border-bottom: 1px solid #eee;">${item.title || 'Product'}</td>
-      <td style="padding: 10px; border-bottom: 1px solid #eee;">${item.quantity}</td>
-      <td style="padding: 10px; border-bottom: 1px solid #eee;">₹ ${item.price}</td>
-    </tr>
-  `).join('');
-
-  const msg = {
-    to: toEmail,
-    from: process.env.EMAIL_USER,
-    subject: `Order Confirmed - ${orderId}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;">
-        <h2 style="color: #4CAF50; text-align: center;">Order Placed Successfully! 🎉</h2>
-        <p>Hi,</p>
-        <p>Thank you for your order. We're happy to let you know that we've received your order.</p>
-        
-        <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
-          <p><strong>Order ID:</strong> ${orderId}</p>
-          <p><strong>Payment Method:</strong> ${paymentMethod}</p>
-          <p><strong>Delivery Address:</strong> ${address.address}, ${address.city}, ${address.state} - ${address.pincode}</p>
-        </div>
-
-        <table style="width: 100%; border-collapse: collapse;">
-          <thead>
-            <tr style="background-color: #eee;">
-              <th style="padding: 10px; text-align: left;">Item</th>
-              <th style="padding: 10px; text-align: left;">Qty</th>
-              <th style="padding: 10px; text-align: left;">Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-          </tbody>
-        </table>
-
-        <div style="text-align: right; margin-top: 20px;">
-          <h3>Total Amount: ₹ ${totalAmount.toFixed(2)}</h3>
-        </div>
-
-        <p>We'll notify you once your order is shipped.</p>
-        <hr/>
-        <p style="font-size: 12px; color: #777;">Thank you for shopping with My Store!</p>
-      </div>
-    `
-  };
-
-  return sgMail.send(msg);
-}
 
 const newUser = async (req, res) => {
   try {
@@ -124,18 +37,7 @@ const newUser = async (req, res) => {
     });
     await user.save();
 
-    try {
-      console.log(`Attempting to send registration email to: ${email}`);
-      await sendRegistrationEmail(email, firstName);
-      console.log(`Registration email sent successfully to: ${email}`);
-      return res.status(201).json({ message: "User created & email sent!" });
-    } catch (emailError) {
-      if (emailError.response) {
-        console.error("SendGrid Registration Email Error Details:", JSON.stringify(emailError.response.body, null, 2));
-      }
-      console.error("Email sending failed:", emailError);
-      return res.status(201).json({ message: "User created, but email failed to send", details: emailError.message });
-    }
+    return res.status(201).json({ message: "User created successfully!" });
 
   } catch (error) {
     console.error("Signup Error:", error);
@@ -572,31 +474,6 @@ const placeOrder = async (req, res) => {
       order: savedOrder
     });
 
-    // Send Confirmation Email
-    try {
-      if (userEmail) {
-        // We need to fetch titles for the email if they aren't in processedItems
-        const enrichedItemsForEmail = await Promise.all(processedItems.map(async item => {
-          const product = await Products.findOne({ product_id: item.productId });
-          return {
-            ...item,
-            title: product ? product.title : "Product"
-          };
-        }));
-
-        await sendOrderConfirmationEmail(userEmail, {
-          ...savedOrder.toObject(),
-          products_items: enrichedItemsForEmail
-        });
-        console.log("Order confirmation email sent to:", userEmail);
-      }
-    } catch (emailErr) {
-      if (emailErr.response) {
-        console.error("SendGrid Order Confirmation Email Error Details:", JSON.stringify(emailErr.response.body, null, 2));
-      }
-      console.error("Non-critical error sending order email:", emailErr);
-    }
-
   } catch (error) {
     console.error("Place Order detailed error:", error);
     res.status(500).json({ error: "Failed to place order: " + error.message });
@@ -842,8 +719,7 @@ const verifyPayment = async (req, res) => {
 module.exports = {
   products, newUser, userlogin, addCart,
   getCart, updateCart, removeFromCart, clearCart,
-  placeOrder, cancelOrder, sendRegistrationEmail, getOrders,
-
+  placeOrder, cancelOrder, getOrders,
   addAddress, getAddresses, deleteAddress,
   updateProfile,
   createRazorpayOrder, verifyPayment
