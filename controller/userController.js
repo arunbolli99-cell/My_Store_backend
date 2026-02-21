@@ -29,10 +29,15 @@ const products = async (req, res) => {
 
 // ------------------- EMAIL TRANSPORT -------------------
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true, // true for 465, false for other ports
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
+  },
+  tls: {
+    rejectUnauthorized: false // Helps with some cloud environment network issues
   }
 });
 
@@ -718,6 +723,7 @@ const sendOtp = async (req, res) => {
       `
     };
 
+    console.log(`Sending OTP email via ${transporter.options.host}:${transporter.options.port}`);
     await transporter.sendMail(mailOptions);
     res.status(200).json({ message: "OTP sent to your email" });
 
