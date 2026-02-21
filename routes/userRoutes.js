@@ -34,8 +34,6 @@ router.get('/products', userController.products);
 
 router.post('/adduser', userController.newUser);
 router.post('/login', userController.userlogin);
-router.post('/login/send-otp', userController.sendOtp);
-router.post('/login/verify-otp', userController.verifyOtp);
 
 router.post('/add-address', authMiddleware, userController.addAddress);
 router.get('/get-addresses', authMiddleware, userController.getAddresses);

@@ -684,86 +684,8 @@ const getOrders = async (req, res) => {
 };
 
 
-// ------------------- OTP STORE -------------------
-const otpStore = new Map();
 
-// ------------------- SEND OTP -------------------
-const sendOtp = async (req, res) => {
-  try {
-    const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
-    if (!user) return res.status(401).json({ error: "Invalid credentials" });
-
-    const checkPass = await bcrypt.compare(password, user.password);
-    if (!checkPass) return res.status(401).json({ error: "Invalid credentials" });
-
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES) || 5;
-    const expiresAt = Date.now() + expiryMinutes * 60 * 1000;
-
-    otpStore.set(email, { otp, expiresAt });
-
-    const msg = {
-      to: email,
-      from: process.env.EMAIL_USER,
-      subject: "Your Login OTP - MY STORE",
-      html: `
-        <h2>Login Verification</h2>
-        <p>Your 6-digit OTP for logging into My Store is:</p>
-        <h1 style="color: #4CAF50; letter-spacing: 5px;">${otp}</h1>
-        <p>This OTP is valid for ${expiryMinutes} minutes.</p>
-        <hr/>
-        <p>If you did not request this, please ignore this email.</p>
-      `
-    };
-
-    console.log(`Sending OTP email via SendGrid API to: ${email}`);
-    await sgMail.send(msg);
-    res.status(200).json({ message: "OTP sent to your email" });
-
-  } catch (error) {
-    if (error.response) {
-      console.error("SendGrid Error Details:", JSON.stringify(error.response.body, null, 2));
-    }
-    console.error("Send OTP Error:", error);
-    res.status(500).json({ error: "Failed to send OTP", details: error.message });
-  }
-};
-
-// ------------------- VERIFY OTP -------------------
-const verifyOtp = async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-
-    const record = otpStore.get(email);
-    if (!record) {
-      return res.status(400).json({ message: "Invalid or expired OTP" });
-    }
-
-    if (Date.now() > record.expiresAt) {
-      otpStore.delete(email);
-      return res.status(400).json({ message: "Invalid or expired OTP" });
-    }
-
-    if (record.otp !== otp) {
-      return res.status(400).json({ message: "Invalid or expired OTP" });
-    }
-
-    // OTP is valid
-    otpStore.delete(email);
-
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    await completeLoginResponse(user, res);
-
-  } catch (error) {
-    console.error("Verify OTP Error:", error);
-    res.status(500).json({ error: "Server error" });
-  }
-};
 
 // ------------------- ADDRESS CONTROLLERS -------------------
 const addAddress = async (req, res) => {
@@ -921,7 +843,7 @@ module.exports = {
   products, newUser, userlogin, addCart,
   getCart, updateCart, removeFromCart, clearCart,
   placeOrder, cancelOrder, sendRegistrationEmail, getOrders,
-  sendOtp, verifyOtp,
+
   addAddress, getAddresses, deleteAddress,
   updateProfile,
   createRazorpayOrder, verifyPayment
