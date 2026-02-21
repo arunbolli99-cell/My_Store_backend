@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 5000;
 
 // CORS
 app.use(cors({
-  origin: 'https://my-store-project-a1o3z8ukk-arunbolli99-cells-projects.vercel.app',
+  origin: 'https://my-store-project-1alr9kpvl-arunbolli99-cells-projects.vercel.app',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
