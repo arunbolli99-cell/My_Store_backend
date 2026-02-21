@@ -130,8 +130,11 @@ const newUser = async (req, res) => {
       console.log(`Registration email sent successfully to: ${email}`);
       return res.status(201).json({ message: "User created & email sent!" });
     } catch (emailError) {
+      if (emailError.response) {
+        console.error("SendGrid Registration Email Error Details:", JSON.stringify(emailError.response.body, null, 2));
+      }
       console.error("Email sending failed:", emailError);
-      return res.status(201).json({ message: "User created, but email failed to send" });
+      return res.status(201).json({ message: "User created, but email failed to send", details: emailError.message });
     }
 
   } catch (error) {
@@ -588,6 +591,9 @@ const placeOrder = async (req, res) => {
         console.log("Order confirmation email sent to:", userEmail);
       }
     } catch (emailErr) {
+      if (emailErr.response) {
+        console.error("SendGrid Order Confirmation Email Error Details:", JSON.stringify(emailErr.response.body, null, 2));
+      }
       console.error("Non-critical error sending order email:", emailErr);
     }
 
@@ -718,8 +724,11 @@ const sendOtp = async (req, res) => {
     res.status(200).json({ message: "OTP sent to your email" });
 
   } catch (error) {
+    if (error.response) {
+      console.error("SendGrid Error Details:", JSON.stringify(error.response.body, null, 2));
+    }
     console.error("Send OTP Error:", error);
-    res.status(500).json({ error: "Failed to send OTP" });
+    res.status(500).json({ error: "Failed to send OTP", details: error.message });
   }
 };
 
