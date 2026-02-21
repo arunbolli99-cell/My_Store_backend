@@ -5,11 +5,12 @@ const JWT = require('jsonwebtoken');
 const Dotenv = require('dotenv');
 const Products = require('../models/Product_data');
 const bcrypt = require('bcrypt');
-const nodemailer = require("nodemailer");
+const sgMail = require("@sendgrid/mail");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 
 Dotenv.config();
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -28,24 +29,13 @@ const products = async (req, res) => {
 
 
 // ------------------- EMAIL TRANSPORT -------------------
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true, // true for 465, false for other ports
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false // Helps with some cloud environment network issues
-  }
-});
+// SendGrid is used instead of nodemailer for better reliability on Render.
 
 // ------------------- SEND EMAIL FUNCTION -------------------
 async function sendRegistrationEmail(toEmail, firstName) {
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
+  const msg = {
     to: toEmail,
+    from: process.env.EMAIL_USER,
     subject: "Registration Successful!",
     html: `
       <h2>Welcome ${firstName} 🎉</h2>
@@ -56,7 +46,7 @@ async function sendRegistrationEmail(toEmail, firstName) {
     `
   };
 
-  return transporter.sendMail(mailOptions);
+  return sgMail.send(msg);
 }
 
 // ------------------- SEND ORDER CONFIRMATION EMAIL -------------------
@@ -71,9 +61,9 @@ async function sendOrderConfirmationEmail(toEmail, orderDetails) {
     </tr>
   `).join('');
 
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
+  const msg = {
     to: toEmail,
+    from: process.env.EMAIL_USER,
     subject: `Order Confirmed - ${orderId}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;">
@@ -111,7 +101,7 @@ async function sendOrderConfirmationEmail(toEmail, orderDetails) {
     `
   };
 
-  return transporter.sendMail(mailOptions);
+  return sgMail.send(msg);
 }
 
 const newUser = async (req, res) => {
@@ -709,9 +699,9 @@ const sendOtp = async (req, res) => {
 
     otpStore.set(email, { otp, expiresAt });
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
+    const msg = {
       to: email,
+      from: process.env.EMAIL_USER,
       subject: "Your Login OTP - MY STORE",
       html: `
         <h2>Login Verification</h2>
@@ -723,8 +713,8 @@ const sendOtp = async (req, res) => {
       `
     };
 
-    console.log(`Sending OTP email via ${transporter.options.host}:${transporter.options.port}`);
-    await transporter.sendMail(mailOptions);
+    console.log(`Sending OTP email via SendGrid API to: ${email}`);
+    await sgMail.send(msg);
     res.status(200).json({ message: "OTP sent to your email" });
 
   } catch (error) {
