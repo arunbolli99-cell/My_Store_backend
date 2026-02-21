@@ -1,6 +1,6 @@
 const User = require('../models/New_user');
 const Cart = require('../models/user_cart');
-const Order = require('../models/user_orders');
+const Order = require('../models/User_orders');
 const JWT = require('jsonwebtoken');
 const Dotenv = require('dotenv');
 const Products = require('../models/Product_data');
